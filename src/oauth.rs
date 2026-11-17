@@ -45,10 +45,18 @@ pub fn authorize_url(client_id: &str, redirect_uri: &str, state: &str) -> String
 }
 
 /// The `code` from the URL Withings redirects to, after checking `state`.
+/// Accepts the full URL, a path with a query (what the local listener sees),
+/// or a partial copy of the query such as `code=...&state=...` or
+/// `<code>&state=...`.
 pub fn code_from_redirect(redirect: &str, expected_state: &str) -> Result<String> {
-    let base = Url::parse("http://localhost/").expect("static URL");
-    let url = base.join(redirect.trim())?;
-    let param = |name: &str| url.query_pairs().find(|(k, _)| k == name).map(|(_, v)| v.into_owned());
+    let query = query_part(redirect.trim());
+    let pairs: Vec<(String, String)> = url::form_urlencoded::parse(query.as_bytes()).into_owned().collect();
+    let param = |name: &str| {
+        pairs.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()).or_else(|| {
+            // A bare first item (`<code>&state=...`) is the code without its key.
+            (name == "code").then(|| pairs.first().filter(|(_, v)| v.is_empty()).map(|(k, _)| k.clone())).flatten()
+        })
+    };
     if param("state").as_deref() != Some(expected_state) {
         bail!("the redirect's state does not match this login; start `withings auth` again and use the newest URL");
     }
@@ -58,6 +66,13 @@ pub fn code_from_redirect(redirect: &str, expected_state: &str) -> Result<String
     match param("code") {
         Some(code) if !code.is_empty() => Ok(code),
         _ => bail!("the redirect has no code; paste the full URL the browser was sent to"),
+    }
+}
+
+fn query_part(redirect: &str) -> &str {
+    match redirect.split_once('?') {
+        Some((_, query)) => query,
+        None => redirect,
     }
 }
 
@@ -95,6 +110,14 @@ mod tests {
         assert_eq!(code, "abc");
         // The local listener only sees the path and query.
         assert_eq!(code_from_redirect("/callback?state=s1&code=xyz", "s1").unwrap(), "xyz");
+    }
+
+    #[test]
+    fn accepts_partial_copies_of_the_redirect() {
+        // Copying from the address bar often loses the start of the URL.
+        assert_eq!(code_from_redirect("?code=abc&state=s1", "s1").unwrap(), "abc");
+        assert_eq!(code_from_redirect("code=abc&state=s1", "s1").unwrap(), "abc");
+        assert_eq!(code_from_redirect("abc&state=s1\n", "s1").unwrap(), "abc");
     }
 
     #[test]
