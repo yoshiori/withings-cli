@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Command-line client for the Withings API: body measurements, activity, sleep, workouts and raw calls"
 license = "MIT"
+repository = "https://github.com/yoshiori/withings-cli"
 
 [[bin]]
 name = "withings"
