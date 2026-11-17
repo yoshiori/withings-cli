@@ -5,7 +5,7 @@
 //! (`startdateymd`/`enddateymd`). Both accept `lastupdate`.
 
 use anyhow::{Result, bail};
-use chrono::{NaiveDate, NaiveTime, TimeZone};
+use chrono::{NaiveDate, NaiveTime, TimeDelta, TimeZone};
 
 pub type Params = Vec<(String, String)>;
 
@@ -39,12 +39,19 @@ fn push_lastupdate(params: &mut Params, range: &Range) {
     }
 }
 
-pub fn ymd_params(range: &Range) -> Params {
+/// Days covered when only one end (or neither) of the range is given.
+pub const DEFAULT_SPAN_DAYS: i64 = 7;
+
+/// The v2 services need both `startdateymd` and `enddateymd`, so a missing
+/// end becomes today and a missing start covers DEFAULT_SPAN_DAYS. With only
+/// `lastupdate`, no dates are sent.
+pub fn ymd_params(range: &Range, today: NaiveDate) -> Params {
     let mut params = Params::new();
-    if let Some(since) = range.since {
+    let only_lastupdate = range.lastupdate.is_some() && range.since.is_none() && range.until.is_none();
+    if !only_lastupdate {
+        let until = range.until.unwrap_or(today);
+        let since = range.since.unwrap_or(until - TimeDelta::days(DEFAULT_SPAN_DAYS - 1));
         params.push(("startdateymd".into(), since.to_string()));
-    }
-    if let Some(until) = range.until {
         params.push(("enddateymd".into(), until.to_string()));
     }
     push_lastupdate(&mut params, range);
@@ -86,9 +93,20 @@ mod tests {
     }
 
     #[test]
-    fn ymd_and_lastupdate() {
-        let range = Range { since: Some(day("2026-11-01")), until: None, lastupdate: Some(1_794_870_000) };
-        assert_eq!(ymd_params(&range), pairs(&[("startdateymd", "2026-11-01"), ("lastupdate", "1794870000")]));
+    fn ymd_fills_the_missing_end_of_the_range() {
+        // The v2 services answer "Missing params" (or 501) unless both dates are sent.
+        let today = day("2026-11-17");
+        let since_only = Range { since: Some(day("2026-11-01")), ..Range::default() };
+        assert_eq!(ymd_params(&since_only, today), pairs(&[("startdateymd", "2026-11-01"), ("enddateymd", "2026-11-17")]));
+        let until_only = Range { until: Some(day("2026-11-10")), ..Range::default() };
+        assert_eq!(ymd_params(&until_only, today), pairs(&[("startdateymd", "2026-11-04"), ("enddateymd", "2026-11-10")]));
+        assert_eq!(ymd_params(&Range::default(), today), pairs(&[("startdateymd", "2026-11-11"), ("enddateymd", "2026-11-17")]));
+    }
+
+    #[test]
+    fn ymd_with_only_lastupdate_sends_just_that() {
+        let range = Range { lastupdate: Some(1_794_870_000), ..Range::default() };
+        assert_eq!(ymd_params(&range, day("2026-11-17")), pairs(&[("lastupdate", "1794870000")]));
         assert_eq!(timestamp_params(&Range::default(), &FixedOffset::east_opt(0).unwrap()), pairs(&[]));
     }
 

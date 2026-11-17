@@ -56,12 +56,13 @@ withings raw v2/sleep getsummary startdateymd=2026-11-01 data_fields=total_sleep
 - `--since` / `--until` are local dates; `--until` is inclusive.
 - `measure` returns one object per measure group with named values, e.g.
   `{"date":"2026-11-17T08:00:00+09:00","grpid":1,"category":"real","fat_ratio":18.5,"weight":68.45}`.
-  Known names: weight, height, fat_free_mass, fat_ratio, fat_mass, diastolic_bp,
-  systolic_bp, heart_pulse, temperature, spo2, body_temperature,
-  skin_temperature, muscle_mass, hydration, bone_mass, pulse_wave_velocity,
-  vo2max. Other types appear as `type_<id>`; `--types` also accepts ids.
+  Names follow the meastype table in the [OpenAPI spec](https://developer.withings.com/openapi.yaml)
+  (weight, fat_ratio, fat_mass, muscle_mass, bone_mass, hydration,
+  visceral_fat, bmr, metabolic_age, heart_pulse, ...). Unlisted types appear
+  as `type_<id>`; `--types` also accepts ids.
 - `activity`, `sleep` and `workouts` print the API's items as they are,
-  following pages. `--fields` sets `data_fields`.
+  following pages. These services need both dates, so a missing `--until`
+  is today and a missing `--since` covers 7 days. `--fields` sets `data_fields`.
 - `raw` prints the `body` of any call to `https://wbsapi.withings.net/<service>`.
 - The API allows about one request per user every 10 minutes for polling;
   use `--lastupdate` for incremental fetches.

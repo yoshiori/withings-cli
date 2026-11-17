@@ -82,10 +82,10 @@ enum Category {
 
 #[derive(Args)]
 struct RangeArgs {
-    /// First day (YYYY-MM-DD, local time)
+    /// First day (YYYY-MM-DD, local time). activity/sleep/workouts default to 7 days before --until
     #[arg(long)]
     since: Option<NaiveDate>,
-    /// Last day, inclusive (YYYY-MM-DD, local time)
+    /// Last day, inclusive (YYYY-MM-DD, local time). activity/sleep/workouts default to today
     #[arg(long)]
     until: Option<NaiveDate>,
     /// Only items created or edited after this Unix time
@@ -150,7 +150,7 @@ fn measure(types: &str, all: bool, category: Category, range: &Range) -> Result<
 }
 
 fn series(service: &str, action: &str, list_key: &str, args: &SeriesArgs) -> Result<Vec<Value>> {
-    let mut params = ymd_params(&args.range.range());
+    let mut params = ymd_params(&args.range.range(), Local::now().date_naive());
     if let Some(fields) = &args.fields {
         params.push(("data_fields".into(), fields.clone()));
     }

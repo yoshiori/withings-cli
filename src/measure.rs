@@ -8,6 +8,7 @@ use chrono::{DateTime, FixedOffset, TimeZone};
 use serde::{Deserialize, Serialize};
 
 /// Withings `meastype` ids with the names this CLI uses for them.
+/// From the meastype table in https://developer.withings.com/openapi.yaml.
 pub const TYPES: &[(i64, &str)] = &[
     (1, "weight"),
     (4, "height"),
@@ -26,6 +27,32 @@ pub const TYPES: &[(i64, &str)] = &[
     (88, "bone_mass"),
     (91, "pulse_wave_velocity"),
     (123, "vo2max"),
+    (130, "afib_ecg"),
+    (135, "qrs_interval"),
+    (136, "pr_interval"),
+    (137, "qt_interval"),
+    (138, "qtc_interval"),
+    (139, "afib_ppg"),
+    (147, "urine_ph"),
+    (148, "urine_specific_gravity"),
+    (151, "urine_nitrites"),
+    (155, "vascular_age"),
+    (167, "nerve_health_score_feet"),
+    (168, "extracellular_water"),
+    (169, "intracellular_water"),
+    (170, "visceral_fat"),
+    (173, "fat_free_mass_segments"),
+    (174, "fat_mass_segments"),
+    (175, "muscle_mass_segments"),
+    (196, "nerve_response_score"),
+    (204, "urine_ketones"),
+    (205, "urine_vitamin_c"),
+    (226, "bmr"),
+    (227, "metabolic_age"),
+    (229, "electrochemical_skin_conductance"),
+    (248, "urine_calcium"),
+    (249, "urine_creatinine"),
+    (251, "urine_calcium_creatinine_ratio"),
 ];
 
 const REAL_MEASUREMENT: i64 = 1;
@@ -136,6 +163,8 @@ mod tests {
     fn names_known_and_unknown_types() {
         assert_eq!(type_name(1), "weight");
         assert_eq!(type_name(76), "muscle_mass");
+        assert_eq!(type_name(170), "visceral_fat");
+        assert_eq!(type_name(226), "bmr");
         assert_eq!(type_name(999), "type_999");
     }
 
