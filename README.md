@@ -10,18 +10,24 @@ composes with `jq`, cron jobs and agents.
 ## Setup
 
 1. Create an application on the [Withings developer dashboard](https://developer.withings.com/dashboard/)
-   (Public API, no contract needed) with this callback URL:
+   (choose **Europe Cloud**: the Public API, no contract needed; US Cloud is
+   contract-only). Withings checks that the callback URL is reachable from
+   its servers, so `localhost` is rejected. Register any public HTTPS page you
+   control, e.g. your GitHub Pages site:
 
    ```
-   http://localhost:8765/callback
+   https://<you>.github.io/
    ```
+
+   The page is never read by this tool; after consent the browser just lands
+   there with `?code=...&state=...` in the address bar.
 
 2. Put its credentials in `~/.config/withings/client.env` (`chmod 600` it):
 
    ```sh
    WITHINGS_CLIENT_ID=...
    WITHINGS_CLIENT_SECRET=...
-   # WITHINGS_REDIRECT_URI=http://localhost:8765/callback   # only if you registered another one
+   WITHINGS_REDIRECT_URI=https://<you>.github.io/   # the callback URL you registered
    ```
 
    Environment variables with the same names take precedence over the file.
@@ -30,12 +36,13 @@ composes with `jq`, cron jobs and agents.
 
    ```sh
    cargo install --path .     # installs ~/.cargo/bin/withings
-   withings auth              # prints a URL; open it in a browser and allow access
+   withings auth --manual     # prints a URL; open it, allow access, paste the URL you land on
    ```
 
-   `withings auth` listens on the callback port and catches the redirect. If
-   the callback is not on localhost (or the browser runs on another machine),
-   use `withings auth --manual` and paste the URL the browser ends up on.
+   Paste within 30 seconds: that is how long the authorization code lives.
+   Without `--manual`, `withings auth` listens on the redirect URI's port and
+   catches the redirect itself, which only works for an `http://localhost`
+   redirect (for example behind your own reachable proxy).
 
 Tokens are stored in `~/.config/withings/tokens.json` (mode 600) and refreshed
 automatically. Access tokens last 3 hours; the refresh token lasts a year and
