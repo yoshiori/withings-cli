@@ -57,6 +57,8 @@ withings measure --all --lastupdate 1794870000     # every type, changed since a
 withings activity --since 2026-11-01 -f table      # steps, distance, calories per day
 withings sleep --since 2026-11-01
 withings workouts --since 2026-11-01
+withings sleep-detail --since 2026-11-16 --fields hr  # sleep stages, incl. Apple Health
+withings intraday --since 2026-11-17 --until 2026-11-17 -f jsonl  # minute by minute
 withings raw v2/sleep getsummary startdateymd=2026-11-01 data_fields=total_sleep_time
 ```
 
@@ -70,6 +72,14 @@ withings raw v2/sleep getsummary startdateymd=2026-11-01 data_fields=total_sleep
 - `activity`, `sleep` and `workouts` print the API's items as they are,
   following pages. These services need both dates, so a missing `--until`
   is today and a missing `--since` covers 7 days. `--fields` sets `data_fields`.
+- Data synced from Apple Health (HealthKit) is missing from the daily
+  summaries behind `activity` and `sleep`. Use `sleep-detail` (one row per
+  sleep stage: `start`, `end`, `state` = awake/light/deep/rem, `model`,
+  `model_id`) and `intraday` (one row per timestamp: `time`, `steps`,
+  `heart_rate`, `calories`, ...). Both make one request per day. A
+  `sleep-detail` day is the night that ends on it, from noon the day before
+  to noon. Several sources (e.g. a watch and a ring) can cover the same
+  night, so group by `model_id` before adding durations up.
 - `raw` prints the `body` of any call to `https://wbsapi.withings.net/<service>`.
 - The API allows about one request per user every 10 minutes for polling;
   use `--lastupdate` for incremental fetches.

@@ -2,27 +2,31 @@
 
 mod api;
 mod config;
+mod intraday;
 mod measure;
 mod oauth;
 mod output;
 mod params;
+mod sleep_detail;
 
 use std::io::{self, BufRead, Write};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
-use chrono::{Local, NaiveDate, Utc};
+use chrono::{Local, NaiveDate, TimeDelta, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::Value;
 
 use crate::config::{Credentials, load_credentials, read_json, tokens_path, write_json};
 use crate::oauth::{Tokens, authorize_url, code_from_redirect, needs_refresh, tokens_from};
 use crate::output::{Format, render};
-use crate::params::{Range, parse_pairs, timestamp_params, ymd_params};
+use crate::params::{Range, day_windows, parse_pairs, timestamp_params, ymd_params};
 
 /// The consent page must be finished within this time.
 const AUTH_WAIT: Duration = Duration::from_secs(300);
 const LISTENER_POLL: Duration = Duration::from_millis(500);
+/// A sleep-detail day starts at noon the day before, so a night is not split.
+const SLEEP_DAY_START: TimeDelta = TimeDelta::hours(-12);
 
 #[derive(Parser)]
 #[command(version, about = "Command-line client for the Withings API")]
@@ -56,10 +60,15 @@ enum Command {
         #[command(flatten)]
         range: RangeArgs,
     },
-    /// Daily activity: steps, distance, calories, ... (v2/measure/getactivity)
+    /// Daily activity from Withings devices (v2/measure/getactivity). Apple Health data: use `intraday`
     Activity(SeriesArgs),
-    /// Sleep summaries (v2/sleep/getsummary)
+    /// Nightly sleep summaries from Withings devices (v2/sleep/getsummary). Apple Health data: use `sleep-detail`
     Sleep(SeriesArgs),
+    /// Sleep stages segment by segment, including Apple Health data (v2/sleep/get).
+    /// A day is the night that ends on it: noon the day before to noon
+    SleepDetail(DayArgs),
+    /// Steps, heart rate, calories, ... minute by minute, including Apple Health data (v2/measure/getintradayactivity)
+    Intraday(DayArgs),
     /// Workouts (v2/measure/getworkouts)
     Workouts(SeriesArgs),
     /// Any API call: withings raw v2/sleep getsummary startdateymd=2026-11-01
@@ -108,6 +117,19 @@ struct SeriesArgs {
     fields: Option<String>,
 }
 
+#[derive(Args)]
+struct DayArgs {
+    /// First day (YYYY-MM-DD, local time). Defaults to 7 days before --until
+    #[arg(long)]
+    since: Option<NaiveDate>,
+    /// Last day, inclusive (YYYY-MM-DD, local time). Defaults to today
+    #[arg(long)]
+    until: Option<NaiveDate>,
+    /// Comma-separated `data_fields` to request, e.g. hr,rr for sleep-detail
+    #[arg(long)]
+    fields: Option<String>,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let items = match cli.command {
@@ -116,6 +138,19 @@ fn main() -> Result<()> {
         Command::Activity(args) => series("v2/measure", "getactivity", "activities", &args)?,
         Command::Sleep(args) => series("v2/sleep", "getsummary", "series", &args)?,
         Command::Workouts(args) => series("v2/measure", "getworkouts", "series", &args)?,
+        Command::SleepDetail(args) => {
+            let bodies = per_day("v2/sleep", "get", &args, SLEEP_DAY_START)?;
+            let items: Vec<Value> = bodies.iter().flat_map(|b| b.get("series").and_then(Value::as_array).cloned().unwrap_or_default()).collect();
+            sleep_detail::segments(&items, &Local)?
+        }
+        Command::Intraday(args) => {
+            let bodies = per_day("v2/measure", "getintradayactivity", &args, TimeDelta::zero())?;
+            let mut rows = Vec::new();
+            for body in &bodies {
+                rows.extend(intraday::rows(body, &Local)?);
+            }
+            rows
+        }
         Command::Raw { service, action, params } => {
             let client = api::Client::new()?;
             let tokens = fresh_tokens(&client)?;
@@ -157,6 +192,24 @@ fn series(service: &str, action: &str, list_key: &str, args: &SeriesArgs) -> Res
     let client = api::Client::new()?;
     let tokens = fresh_tokens(&client)?;
     client.call_all(&tokens.access_token, service, action, &params, list_key)
+}
+
+/// Calls `action` once per day of the range (Withings cuts long `v2/sleep get`
+/// answers short without saying so) and returns every body.
+fn per_day(service: &str, action: &str, args: &DayArgs, day_start: TimeDelta) -> Result<Vec<Value>> {
+    let range = Range { since: args.since, until: args.until, lastupdate: None };
+    let client = api::Client::new()?;
+    let tokens = fresh_tokens(&client)?;
+    day_windows(&range, Local::now().date_naive(), &Local, day_start)
+        .into_iter()
+        .map(|(start, end)| {
+            let mut params = vec![("startdate".to_string(), start.to_string()), ("enddate".to_string(), end.to_string())];
+            if let Some(fields) = &args.fields {
+                params.push(("data_fields".into(), fields.clone()));
+            }
+            client.call(&tokens.access_token, service, action, &params)
+        })
+        .collect()
 }
 
 fn auth(manual: bool) -> Result<()> {
