@@ -30,7 +30,9 @@ A single binary crate (`withings`, edition 2024) built on blocking `reqwest` wit
 - `config.rs`: reads credentials from env vars, falling back to `~/.config/withings/client.env` (XDG-aware). Writes `tokens.json` with mode 600.
 - `output.rs`: `json` / `jsonl` / `table`. The table flattens nested objects into dotted columns.
 
-Adding a v2 endpoint usually means one more `Command` variant that calls `series(service, action, list_key, args)`. `list_key` is the array in `body` to collect: `activities` for getactivity, `series` for the others.
+`sleep-detail` and `intraday` don't page. They call once per day (`params::day_windows`, then `per_day` in `main.rs`) because long `v2/sleep get` ranges come back truncated. `sleep_detail::segments` drops segments that come back twice, and `intraday::rows` turns the `series` object keyed by Unix time into rows.
+
+Adding a paged v2 endpoint usually means one more `Command` variant that calls `series(service, action, list_key, args)`. `list_key` is the array in `body` to collect: `activities` for getactivity, `series` for the others.
 
 ## Withings API behavior that shapes the code
 
