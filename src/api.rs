@@ -49,7 +49,7 @@ pub fn body_of(text: &str) -> Result<Value> {
     let message = envelope.error.unwrap_or_default();
     match envelope.status {
         STATUS_OK => Ok(envelope.body),
-        STATUS_INVALID_TOKEN => bail!("Withings rejected the token ({message}); run `withings-sync auth` to log in again"),
+        STATUS_INVALID_TOKEN => bail!("Withings rejected the token ({message}); run `withings auth` to log in again"),
         STATUS_RATE_LIMITED => bail!("Withings rate limit reached ({message}); fetch at most once every 10 minutes"),
         status => bail!("Withings API error {status}: {message}"),
     }
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn explains_an_expired_or_revoked_token() {
         let err = body_of(r#"{"status":401,"error":"XRequestID: Not provided invalid_token"}"#).unwrap_err().to_string();
-        assert!(err.contains("withings-sync auth"), "{err}");
+        assert!(err.contains("`withings auth`"), "{err}");
     }
 
     #[test]
